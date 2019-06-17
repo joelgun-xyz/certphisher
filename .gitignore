@@ -2,3 +2,5 @@
 app/static/.DS_Store
 config.ini
 start.sh
+.DS_Store
+.vscode
