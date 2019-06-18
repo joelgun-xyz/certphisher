@@ -44,19 +44,21 @@ Edit the **default-config.ini** with your API keys and rename it to **config.ini
 ```
 ; config.ini
 [apikeys]
-vt_key = XXXXXXXXXXXXXXXXXx
-urlscan_key = XXXXXXXXXXXXXXXXXXXXXXX
+vt_key = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXx
+urlscan_key = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXx
+
 
 [mongodb]
-my_client = mongodb://localhost:27017/
+my_instance = mongodb://localhost:27017/
 my_db = certphisher
 my_col = sites
-
+username = foo
+password = bar
 
 [slack]
-slack_integration = 1
-bot_key = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXx
-channel = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+integration = 1
+bot_key = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXx
+channel = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXx
 relevant_score = 140
 ```
 
@@ -80,7 +82,11 @@ relevant_score = 140
 
 
 If you enable notifications, it should look like this:
+
+
 ![Slack](slack_notifcation.png)
+
+
 
 ## Usage 
 
