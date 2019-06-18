@@ -151,7 +151,6 @@
               <th>Registered Site</th>
               <th>CA</th>
               <th>Certphisher Risk Score</th>
-              <th>Symantec SiteReview</th>
               <th>Scan Date</th>
               <!-- <th>Report saved</th> -->
               <th>Live Reports</th>
@@ -172,14 +171,7 @@
                     {% else %}
                     <span class="badge badge-pill badge-info">{{site.certphisher_score}}</span>
                     {% endif %}
-                </td>  
-                <td>
-                    {% if site.sitereview_bluecoat is defined %}
-                    <span class="badge badge-pill badge-secondary">{{site.sitereview_bluecoat.category}}</span>
-                    {% else %}
-                
-                    {% endif %}
-                </td>
+                </td> 
                 <td>{{site.virus_total.scan_date}}</td>
 
                 <td>

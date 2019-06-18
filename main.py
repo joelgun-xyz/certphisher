@@ -41,13 +41,14 @@ config = configparser.ConfigParser()
 config.read('config.ini')
 
 channel = config.get('slack', 'channel')
-slack_score = config.get('slack', 'relevant_score')
+slack_score = int(config.get('slack', 'relevant_score'))
+slack_integration = int(config.get('slack', 'integration'))
 vt_key = config.get('apikeys', 'vt_key')
 urlscan_key = config.get('apikeys', 'urlscan_key')
 
-myclient = pymongo.MongoClient("mongodb://localhost:27017/")
-mydb = myclient["certphisher"]
-mycol = mydb["sites"]
+myclient = pymongo.MongoClient(config.get("mongodb", "my_instance"))
+mydb = myclient[config.get("mongodb", "my_db")]
+mycol = mydb[config.get("mongodb", "my_col")]
 
 slack_token = config.get('slack', 'bot_key')
 sc = SlackClient(slack_token)
@@ -174,11 +175,13 @@ def save_url(domain, score, ca):
     #urlhaus_host_check(domain, host_ip, site.inserted_id)
     #dnsbl_check(domain, host_ip)
     urlhaus_url_check(domain, site.inserted_id)
-    sitereview_check( domain, site.inserted_id)
+    #sitereview_check( domain, site.inserted_id)
     permalink = vt_scan( domain, site.inserted_id)
     reportpage = urlscan_io(domain, site.inserted_id)
-    if score >= slack_score:
-        send_slack_message(domain, score, ca, permalink, reportpage)
+    if slack_integration:
+        if score >= slack_score:
+            send_slack_message(domain, score, ca, permalink, reportpage)
+    
 
     #vt_domain_report(domain, siteid)
     return True
