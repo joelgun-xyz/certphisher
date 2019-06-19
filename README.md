@@ -5,7 +5,7 @@ I've updated his scoring engine with a submit functionality to VirusTotal, urlsc
 Feel free to modify, tweak the code. 
 
 ## TLDR; Container ftw
-Thanks to [plonxyz](https://twitter.com/plonxyz) there is a dockerized version as well[certphisher-dockerized](https://github.com/joelgun-xyz/certphisher-dockerized/)
+Thanks to [plonxyz](https://twitter.com/plonxyz) there is a dockerized version as well [certphisher-dockerized](https://github.com/joelgun-xyz/certphisher-dockerized/)
 
 
 ## Getting Started
