@@ -126,6 +126,13 @@ Your Dashboard will look similar to this:
 
 
 
+### Change Scoring 
+
+Just the add / change the values in the files suspicious.yaml or external.yaml with your own keyword / scores if you want to customize it. 
+
+
+![scoring_engine](scoring_engine.png)
+
 ## Example Dataset
 
 This is an example database entry. 
@@ -146,9 +153,6 @@ This is an example database entry.
 * **joelgun** - [Twitter](https://twitter.com/joelgun)
 
 
-## License
-
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details
 
 ## Acknowledgments
 
