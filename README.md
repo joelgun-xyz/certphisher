@@ -147,11 +147,13 @@ This is an example database entry.
 ```
 
 
+## License
+This project is licensed under GNU General Public License v3.0
+
 
 ## Authors
 
 * **joelgun** - [Twitter](https://twitter.com/joelgun)
-
 
 
 ## Acknowledgments
