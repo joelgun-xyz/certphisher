@@ -243,7 +243,11 @@ def callback(message, context):
         return
 
     if message['message_type'] == "certificate_update":
-        all_domains = message['data']['leaf_cert']['all_domains']
+        #all_domains = message['data']['leaf_cert']['all_domains']
+        # Checking the subject Alt Names as it contains more urls than all_domains and more info
+        all_domains = message['data']['leaf_Cert']['extensions']['subjectAltName']
+        all_domains = all_domains.replace('DNS:','')
+        all_domains = all_domains.split(",")
         ca = message['data']['chain'][0]['subject']['CN']
             
         for domain in all_domains:
