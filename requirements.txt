@@ -11,7 +11,7 @@ Jinja2==2.10.1
 jsbeautifier==1.9.0b5
 jsonschema==3.0.1
 lxml==4.2.5
-pycares==3.0.0
+pycares==4.2.0
 pycparser==2.19
 pydnsbl==0.6.2
 pylint==2.3.1
