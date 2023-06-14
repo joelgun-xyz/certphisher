@@ -7,7 +7,7 @@ future==0.17.1
 htmlmin==0.1.12
 humanize==0.5.1
 idna==2.7
-Jinja2==2.10.1
+Jinja2==2.11.3
 jsbeautifier==1.9.0b5
 jsonschema==3.0.1
 lxml==4.2.5
