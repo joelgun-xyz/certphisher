@@ -1,7 +1,7 @@
 certstream==1.10
 dnspython==1.16.0
 entropy==0.11
-Flask==1.0.2
+Flask==2.2.5
 Flask-PyMongo==2.2.0
 future==0.17.1
 htmlmin==0.1.12
