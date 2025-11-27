@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: certphisher-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    environment:
+      - MONGO_INITDB_DATABASE=certphisher
+    networks:
+      - certphisher-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/certphisher --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Certphisher Backend (Certificate Stream Monitor)
+  certphisher-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: certphisher-backend
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./config.ini:/app/config.ini:ro
+      - ./suspicious.yaml:/app/suspicious.yaml:ro
+      - ./external.yaml:/app/external.yaml:ro
+      - ./app/uploads:/app/app/uploads
+      - logs:/app/logs
+    environment:
+      - MONGODB_HOST=mongodb
+      - MONGODB_PORT=27017
+      - MONGODB_DB=certphisher
+      - PYTHONUNBUFFERED=1
+    networks:
+      - certphisher-network
+    command: python3 main.py
+
+  # Flask Frontend (Web Dashboard)
+  certphisher-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: certphisher-frontend
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./config.ini:/app/config.ini:ro
+      - ./app/uploads:/app/app/uploads
+    environment:
+      - MONGODB_HOST=mongodb
+      - MONGODB_PORT=27017
+      - MONGODB_DB=certphisher
+      - FLASK_APP=app.py
+      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+    networks:
+      - certphisher-network
+    working_dir: /app/app
+    command: flask run --host=0.0.0.0 --port=5000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  certphisher-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+  logs:
+    driver: local
