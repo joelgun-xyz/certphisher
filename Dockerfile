@@ -1,7 +1,7 @@
 # Certphisher - Dockerfile
 # Multi-stage build for optimized image size
 
-FROM python:3.11-slim as base
+FROM python:3.11-slim AS base
 
 # Install system dependencies including Chrome for Selenium
 RUN apt-get update && apt-get install -y \
