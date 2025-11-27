@@ -22,3 +22,6 @@ Pillow==11.0.0
 opencv-python==4.10.0.84
 numpy==2.2.0
 scikit-image==0.24.0
+beautifulsoup4==4.12.3
+selenium==4.27.1
+webdriver-manager==4.0.2

@@ -42,6 +42,7 @@ import cv2
 import numpy as np
 from skimage.metrics import structural_similarity as ssim
 import urllib3
+from logo_detector import LogoDetector
 
 # Disable SSL warnings for logo detection (phishing sites often have invalid certs)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -62,6 +63,9 @@ mycol = mydb[config.get("mongodb", "my_col")]
 slack_token = config.get('slack', 'bot_key')
 sc = WebClient(token=slack_token)
 
+# Initialize Logo Detector
+logo_detector = LogoDetector(myclient, config.get("mongodb", "my_db"))
+
 # CA Filtering - Legitimate CAs to exclude (not commonly used by phishers)
 LEGITIMATE_CAS = []
 try:
@@ -74,24 +78,33 @@ except:
         'GlobalSign', 'Entrust', 'GoDaddy', 'Network Solutions'
     ]
 
-# Logo detection settings
-LOGO_DETECTION_ENABLED = False
+# Logo detection settings - now uses database but can be disabled in config
+LOGO_DETECTION_ENABLED = True
 try:
     LOGO_DETECTION_ENABLED = config.getboolean('logo_detection', 'enabled')
 except:
     pass
 
-# Brand keywords that should have logos
-BRAND_KEYWORDS = []
-try:
-    brand_keywords_str = config.get('logo_detection', 'brand_keywords')
-    BRAND_KEYWORDS = [kw.strip().lower() for kw in brand_keywords_str.split(',') if kw.strip()]
-except:
-    # Default brand keywords
-    BRAND_KEYWORDS = [
-        'paypal', 'amazon', 'apple', 'microsoft', 'google', 'facebook',
-        'instagram', 'netflix', 'dropbox', 'adobe', 'linkedin'
-    ]
+# Function to get brand keywords from database (fallback to config)
+def get_brand_keywords():
+    """Get brand keywords from database, fallback to config"""
+    try:
+        brands = logo_detector.get_brands_from_db()
+        if brands:
+            return list(brands.keys())
+    except:
+        pass
+
+    # Fallback to config.ini
+    try:
+        brand_keywords_str = config.get('logo_detection', 'brand_keywords')
+        return [kw.strip().lower() for kw in brand_keywords_str.split(',') if kw.strip()]
+    except:
+        # Default brand keywords
+        return [
+            'paypal', 'amazon', 'apple', 'microsoft', 'google', 'facebook',
+            'instagram', 'netflix', 'dropbox', 'adobe', 'linkedin'
+        ]
 
 certstream_url = 'wss://certstream.calidog.io'
 
@@ -208,18 +221,14 @@ def sitereview_check(domain, siteid):
     mycol.update_one(site_record, response_data)
 
 def check_brand_in_domain(domain):
-    """Check if any brand keywords appear in the domain"""
-    domain_lower = domain.lower()
-    found_brands = []
-    for brand in BRAND_KEYWORDS:
-        if brand in domain_lower:
-            found_brands.append(brand)
-    return found_brands
+    """Check if any brand keywords appear in the domain - uses database"""
+    found_brands_data = logo_detector.check_brand_in_domain(domain)
+    # Return just the keywords for backwards compatibility
+    return [brand['keyword'] for brand in found_brands_data]
 
-def detect_logo_on_site(domain, expected_brands, siteid):
+def detect_logo_on_site_legacy(domain, expected_brands, siteid):
     """
-    Fetch the website and check if it contains logos for the brands mentioned in the domain.
-    This is a basic implementation that checks for brand names in images and common logo locations.
+    Legacy text-based logo detection (fallback)
     """
     if not LOGO_DETECTION_ENABLED or not expected_brands:
         return None
@@ -276,6 +285,46 @@ def detect_logo_on_site(domain, expected_brands, siteid):
         mycol.update_one(site_record, response_data)
         return error_result
 
+def detect_logo_on_site(domain, siteid):
+    """
+    Enhanced logo detection with image comparison
+    Uses the LogoDetector class for advanced matching
+    """
+    if not LOGO_DETECTION_ENABLED:
+        return None
+
+    try:
+        # Use advanced logo detector
+        result = logo_detector.detect_logo_on_site(domain, siteid)
+
+        if result:
+            # For backwards compatibility, also create simple result
+            detected_keywords = [b['keyword'] for b in result.get('detected_brands', [])]
+            legacy_result = {
+                "logo_check_status": "checked_advanced",
+                "expected_brands": detected_keywords,
+                "brands_in_content": [b['keyword'] for b in result.get('detected_brands', []) if b.get('text_found')],
+                "brand_mismatch": result.get('overall_mismatch', False),
+                "confidence_score": result.get('confidence_score', 0),
+                "similarity_scores": {b['keyword']: b.get('similarity_score', 0) for b in result.get('detected_brands', [])}
+            }
+
+            # Store legacy format too
+            site_record = {"_id": siteid}
+            response_data = {"$set": {"logo_detection": legacy_result}}
+            mycol.update_one(site_record, response_data)
+
+            return legacy_result
+
+        return None
+
+    except Exception as e:
+        # Fallback to legacy detection
+        found_brands = check_brand_in_domain(domain)
+        if found_brands:
+            return detect_logo_on_site_legacy(domain, found_brands, siteid)
+        return None
+
 def is_legitimate_ca(ca_name):
     """Check if the CA is in the legitimate CA list"""
     for legit_ca in LEGITIMATE_CAS:
@@ -295,15 +344,22 @@ def save_url(domain, score, ca):
 
     # Check for brand keywords and perform logo detection
     found_brands = check_brand_in_domain(domain)
+    logo_result = None
     if found_brands:
-        logo_result = detect_logo_on_site(domain, found_brands, site.inserted_id)
+        logo_result = detect_logo_on_site(domain, site.inserted_id)
         # If brand is in domain but not on the site, increase suspicion score
         if logo_result and logo_result.get('brand_mismatch'):
             score += 20
             # Update the score in the database
             mycol.update_one({"_id": site.inserted_id}, {"$set": {"certphisher_score": score}})
+
+            confidence = logo_result.get('confidence_score', 0)
+            similarity_info = ""
+            if 'similarity_scores' in logo_result:
+                similarity_info = " | Similarity: " + ", ".join([f"{k}:{v:.2f}" for k, v in logo_result['similarity_scores'].items()])
+
             tqdm.tqdm.write(
-                f"[!] Logo Mismatch: Brand '{', '.join(found_brands)}' in domain but not on site - score increased by 20")
+                f"[!] Logo Mismatch: Brand '{', '.join(found_brands)}' in domain but not on site - score +20 (confidence: {confidence:.2f}){similarity_info}")
 
     permalink = vt_scan( domain, site.inserted_id)
     reportpage = urlscan_io(domain, site.inserted_id)
