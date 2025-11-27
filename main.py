@@ -34,8 +34,18 @@ from tld import get_tld
 from urlscan import UrlScan
 from confusables import unconfuse
 from tldextract import extract
-from slackclient import SlackClient
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
+from PIL import Image
+from io import BytesIO
+import cv2
+import numpy as np
+from skimage.metrics import structural_similarity as ssim
+import urllib3
+from logo_detector import LogoDetector
 
+# Disable SSL warnings for logo detection (phishing sites often have invalid certs)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -51,7 +61,50 @@ mydb = myclient[config.get("mongodb", "my_db")]
 mycol = mydb[config.get("mongodb", "my_col")]
 
 slack_token = config.get('slack', 'bot_key')
-sc = SlackClient(slack_token)
+sc = WebClient(token=slack_token)
+
+# Initialize Logo Detector
+logo_detector = LogoDetector(myclient, config.get("mongodb", "my_db"))
+
+# CA Filtering - Legitimate CAs to exclude (not commonly used by phishers)
+LEGITIMATE_CAS = []
+try:
+    legitimate_cas_str = config.get('ca_filtering', 'legitimate_cas')
+    LEGITIMATE_CAS = [ca.strip() for ca in legitimate_cas_str.split(',') if ca.strip()]
+except:
+    # Default legitimate CAs if not in config
+    LEGITIMATE_CAS = [
+        'DigiCert', 'Sectigo', 'GeoTrust', 'Thawte', 'Comodo',
+        'GlobalSign', 'Entrust', 'GoDaddy', 'Network Solutions'
+    ]
+
+# Logo detection settings - now uses database but can be disabled in config
+LOGO_DETECTION_ENABLED = True
+try:
+    LOGO_DETECTION_ENABLED = config.getboolean('logo_detection', 'enabled')
+except:
+    pass
+
+# Function to get brand keywords from database (fallback to config)
+def get_brand_keywords():
+    """Get brand keywords from database, fallback to config"""
+    try:
+        brands = logo_detector.get_brands_from_db()
+        if brands:
+            return list(brands.keys())
+    except:
+        pass
+
+    # Fallback to config.ini
+    try:
+        brand_keywords_str = config.get('logo_detection', 'brand_keywords')
+        return [kw.strip().lower() for kw in brand_keywords_str.split(',') if kw.strip()]
+    except:
+        # Default brand keywords
+        return [
+            'paypal', 'amazon', 'apple', 'microsoft', 'google', 'facebook',
+            'instagram', 'netflix', 'dropbox', 'adobe', 'linkedin'
+        ]
 
 certstream_url = 'wss://certstream.calidog.io'
 
@@ -167,21 +220,153 @@ def sitereview_check(domain, siteid):
     response_data = { "$set": {"sitereview_bluecoat": {"url": s.url, "category": s.category }}}
     mycol.update_one(site_record, response_data)
 
+def check_brand_in_domain(domain):
+    """Check if any brand keywords appear in the domain - uses database"""
+    found_brands_data = logo_detector.check_brand_in_domain(domain)
+    # Return just the keywords for backwards compatibility
+    return [brand['keyword'] for brand in found_brands_data]
+
+def detect_logo_on_site_legacy(domain, expected_brands, siteid):
+    """
+    Legacy text-based logo detection (fallback)
+    """
+    if not LOGO_DETECTION_ENABLED or not expected_brands:
+        return None
+
+    try:
+        # Give the site some time to be accessible
+        time.sleep(5)
+
+        # Try to fetch the homepage
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        response = requests.get(f"https://{domain}", headers=headers, timeout=10, verify=False)
+
+        if response.status_code != 200:
+            return {"logo_check_status": "site_not_accessible", "expected_brands": expected_brands}
+
+        # Simple heuristic: check if brand names appear in the page content
+        page_content = response.text.lower()
+        brands_found_in_content = []
+
+        for brand in expected_brands:
+            # Check if brand name appears in the page
+            if brand in page_content:
+                brands_found_in_content.append(brand)
+
+        # Check for common logo image patterns
+        logo_indicators = ['logo', 'brand', 'header-logo', 'nav-logo']
+        has_logo_elements = any(indicator in page_content for indicator in logo_indicators)
+
+        result = {
+            "logo_check_status": "checked",
+            "expected_brands": expected_brands,
+            "brands_in_content": brands_found_in_content,
+            "has_logo_elements": has_logo_elements,
+            "brand_mismatch": len(brands_found_in_content) == 0  # Suspicious if brand in domain but not on page
+        }
+
+        # Update MongoDB with logo detection results
+        site_record = {"_id": siteid}
+        response_data = {"$set": {"logo_detection": result}}
+        mycol.update_one(site_record, response_data)
+
+        return result
+
+    except Exception as e:
+        error_result = {
+            "logo_check_status": "error",
+            "error": str(e),
+            "expected_brands": expected_brands
+        }
+        site_record = {"_id": siteid}
+        response_data = {"$set": {"logo_detection": error_result}}
+        mycol.update_one(site_record, response_data)
+        return error_result
+
+def detect_logo_on_site(domain, siteid):
+    """
+    Enhanced logo detection with image comparison
+    Uses the LogoDetector class for advanced matching
+    """
+    if not LOGO_DETECTION_ENABLED:
+        return None
+
+    try:
+        # Use advanced logo detector
+        result = logo_detector.detect_logo_on_site(domain, siteid)
+
+        if result:
+            # For backwards compatibility, also create simple result
+            detected_keywords = [b['keyword'] for b in result.get('detected_brands', [])]
+            legacy_result = {
+                "logo_check_status": "checked_advanced",
+                "expected_brands": detected_keywords,
+                "brands_in_content": [b['keyword'] for b in result.get('detected_brands', []) if b.get('text_found')],
+                "brand_mismatch": result.get('overall_mismatch', False),
+                "confidence_score": result.get('confidence_score', 0),
+                "similarity_scores": {b['keyword']: b.get('similarity_score', 0) for b in result.get('detected_brands', [])}
+            }
+
+            # Store legacy format too
+            site_record = {"_id": siteid}
+            response_data = {"$set": {"logo_detection": legacy_result}}
+            mycol.update_one(site_record, response_data)
+
+            return legacy_result
+
+        return None
+
+    except Exception as e:
+        # Fallback to legacy detection
+        found_brands = check_brand_in_domain(domain)
+        if found_brands:
+            return detect_logo_on_site_legacy(domain, found_brands, siteid)
+        return None
+
+def is_legitimate_ca(ca_name):
+    """Check if the CA is in the legitimate CA list"""
+    for legit_ca in LEGITIMATE_CAS:
+        if legit_ca.lower() in ca_name.lower():
+            return True
+    return False
+
 def save_url(domain, score, ca):
     mydict = { "certphisher_site":  domain.lower(), "certphisher_score": score , "certificate_authority": ca,  "checked_vt": "false" , "vt_report_saved": "false"}
     site = mycol.insert_one(mydict)
-    
+
     #host_ip = get_ip(domain)
     #urlhaus_host_check(domain, host_ip, site.inserted_id)
     #dnsbl_check(domain, host_ip)
     urlhaus_url_check(domain, site.inserted_id)
     #sitereview_check( domain, site.inserted_id)
+
+    # Check for brand keywords and perform logo detection
+    found_brands = check_brand_in_domain(domain)
+    logo_result = None
+    if found_brands:
+        logo_result = detect_logo_on_site(domain, site.inserted_id)
+        # If brand is in domain but not on the site, increase suspicion score
+        if logo_result and logo_result.get('brand_mismatch'):
+            score += 20
+            # Update the score in the database
+            mycol.update_one({"_id": site.inserted_id}, {"$set": {"certphisher_score": score}})
+
+            confidence = logo_result.get('confidence_score', 0)
+            similarity_info = ""
+            if 'similarity_scores' in logo_result:
+                similarity_info = " | Similarity: " + ", ".join([f"{k}:{v:.2f}" for k, v in logo_result['similarity_scores'].items()])
+
+            tqdm.tqdm.write(
+                f"[!] Logo Mismatch: Brand '{', '.join(found_brands)}' in domain but not on site - score +20 (confidence: {confidence:.2f}){similarity_info}")
+
     permalink = vt_scan( domain, site.inserted_id)
     reportpage = urlscan_io(domain, site.inserted_id)
     if slack_integration:
         if score >= slack_score:
-            send_slack_message(domain, score, ca, permalink, reportpage)
-    
+            send_slack_message(domain, score, ca, permalink, reportpage, found_brands)
+
 
     #vt_domain_report(domain, siteid)
     return True
@@ -245,17 +430,22 @@ def callback(message, context):
     if message['message_type'] == "certificate_update":
         #all_domains = message['data']['leaf_cert']['all_domains']
         # Checking the subject Alt Names as it contains more urls than all_domains and more info
-        all_domains = message['data']['leaf_Cert']['extensions']['subjectAltName']
+        all_domains = message['data']['leaf_cert']['extensions']['subjectAltName']
         all_domains = all_domains.replace('DNS:','')
         all_domains = all_domains.split(",")
         ca = message['data']['chain'][0]['subject']['CN']
-            
+
+        # CA Filtering: Skip certificates from legitimate CAs
+        if is_legitimate_ca(ca):
+            pbar.update(len(all_domains))
+            return
+
         for domain in all_domains:
             if "STH" in domain:
                 continue
             domain = domain.replace("*.","")
             pbar.update(1)
-            
+
             score = score_domain(domain)
             # If issued from a free CA = more suspicious
             if "Let's Encrypt" in message['data']['chain'][0]['subject']['aggregated']:
@@ -264,32 +454,38 @@ def callback(message, context):
             if score >= 100:
                 tqdm.tqdm.write(
                     "[!] Suspicious: "
-                    "{} (score={})".format(colored(domain, 'red', attrs=['underline', 'bold']), score))
+                    "{} (score={}) [CA: {}]".format(colored(domain, 'red', attrs=['underline', 'bold']), score, ca))
                 save_url(domain, score, ca )
             elif score >= 90:
                 tqdm.tqdm.write(
                     "[!] Likely: "
-                    "{} (score={})".format(colored(domain, 'red', attrs=['underline']), score))
+                    "{} (score={}) [CA: {}]".format(colored(domain, 'red', attrs=['underline']), score, ca))
                 save_url(domain, score, ca )
             elif score >= 80:
                 tqdm.tqdm.write(
                     "[!] Likely    : "
-                    "{} (score={})".format(colored(domain, 'yellow', attrs=['underline']), score))
+                    "{} (score={}) [CA: {}]".format(colored(domain, 'yellow', attrs=['underline']), score, ca))
             
         
-def send_slack_message(domain, score, ca, permalink, reportpage):
+def send_slack_message(domain, score, ca, permalink, reportpage, found_brands=None):
     #Send message in channel
 
-    message = ":information_source: *New suspicious Domain found:*\n *>>> "+ domain.replace(".","[.]") +" <<< with score: [" + str(score) + "]*\n - Urlscan io result *<  "+reportpage+"  >*\n\n - Virustotal result: *< "+permalink+"  >*"
-    
+    message = ":warning: *New suspicious Domain found:*\n *>>> "+ domain.replace(".","[.]") +" <<< with score: [" + str(score) + "]*\n"
+    message += f"- Certificate Authority: *{ca}*\n"
+
+    if found_brands:
+        message += f"- :mag: Brand keywords detected: *{', '.join(found_brands)}*\n"
+
+    message += f"- Urlscan io result: *<{reportpage}>*\n"
+    message += f"- Virustotal result: *<{permalink}>*"
+
     try:
-        sc.api_call(
-            "chat.postMessage",
+        sc.chat_postMessage(
             channel="#" + channel,
             text=message
         )
-    except:
-        print("Debug: Error in send_to_slack.")
+    except SlackApiError as e:
+        print(f"Debug: Error in send_to_slack: {e.response['error']}")
 
 
 if __name__ == '__main__':

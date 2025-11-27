@@ -1,0 +1,59 @@
+# Git
+.git
+.gitignore
+.github
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation (will be copied separately if needed)
+*.md
+!README.md
+!CHANGELOG.md
+
+# Images/Screenshots
+*.png
+*.jpg
+*.jpeg
+!certphisher_dashboard.png
+!scoring_engine.png
+!slack_notifcation.png
+
+# Local data
+app/uploads/*
+logs/
+*.log
+
+# Config files (will be mounted as volumes)
+config.ini
+
+# Temporary files
+*.tmp
+*.bak
+.cache/

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Settings - Certphisher</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <style>
+        .brand-card {
+            margin-bottom: 20px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .brand-card img {
+            max-width: 150px;
+            max-height: 100px;
+            margin: 10px 0;
+        }
+        .screenshot-preview {
+            max-width: 300px;
+            border: 1px solid #ccc;
+            margin-top: 10px;
+        }
+        .upload-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-dark fixed-top bg-dark flex-md-nowrap p-0 shadow">
+    <a class="navbar-brand col-sm-3 col-md-2 mr-0" href="#"><h5>🔒 Certphisher</h5></a>
+</nav>
+
+<div class="container-fluid">
+    <div class="row">
+        <nav class="col-md-2 d-none d-md-block bg-light sidebar">
+            <div class="sidebar-sticky">
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-home"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                            Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/alltime">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-bar-chart-2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                            Alltime
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/settings">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-settings"><circle cx="12" cy="12" r="3"></circle><path d="M12 1v6m0 6v6m0-18l-1.5 1.5m3 0L12 1m0 22l-1.5-1.5m3 0L12 23M1 12h6m6 0h6M1 12l1.5-1.5m0 3L1 12m22 0h-6m-6 0H1m22 0l-1.5-1.5m0 3L23 12"></path></svg>
+                            Settings
+                            <span class="sr-only">(current)</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
+        <main role="main" class="col-md-9 ml-sm-auto col-lg-10 px-4">
+            <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                <h1 class="h2">⚙️ Brand Monitoring Settings</h1>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <!-- Add New Brand Section -->
+            <div class="upload-section">
+                <h3>➕ Add New Brand to Monitor</h3>
+                <form method="POST" action="/settings/add_brand" enctype="multipart/form-data">
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="brand_keyword"><strong>Brand Keyword</strong></label>
+                            <input type="text" class="form-control" id="brand_keyword" name="brand_keyword" placeholder="e.g., bankxyz" required>
+                            <small class="form-text text-muted">Used to detect brand in domain names</small>
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="brand_name"><strong>Full Brand Name</strong></label>
+                            <input type="text" class="form-control" id="brand_name" name="brand_name" placeholder="e.g., Bank XYZ">
+                            <small class="form-text text-muted">Optional display name</small>
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="reference_url"><strong>Official Website</strong></label>
+                            <input type="url" class="form-control" id="reference_url" name="reference_url" placeholder="https://www.bankxyz.com">
+                            <small class="form-text text-muted">Used for screenshot comparison</small>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="logo_file"><strong>Upload Reference Logo</strong></label>
+                        <input type="file" class="form-control-file" id="logo_file" name="logo_file" accept="image/*">
+                        <small class="form-text text-muted">Upload company logo for visual comparison (PNG, JPG, GIF)</small>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Add Brand</button>
+                </form>
+            </div>
+
+            <!-- Existing Brands -->
+            <h3>📋 Monitored Brands</h3>
+            <div class="row">
+                {% if brands %}
+                    {% for brand in brands %}
+                    <div class="col-md-6">
+                        <div class="brand-card">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h5>
+                                        <span class="badge badge-primary">{{ brand.keyword }}</span>
+                                        {% if brand.name %}
+                                        <span class="text-muted">- {{ brand.name }}</span>
+                                        {% endif %}
+                                    </h5>
+                                </div>
+                                <form method="POST" action="/settings/delete_brand/{{ brand._id }}" style="display: inline;">
+                                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this brand?')">✕</button>
+                                </form>
+                            </div>
+
+                            {% if brand.logo_path %}
+                            <div>
+                                <strong>Reference Logo:</strong><br>
+                                <img src="{{ url_for('uploaded_file', filename=brand.logo_path) }}" alt="{{ brand.keyword }} logo" class="img-thumbnail">
+                            </div>
+                            {% endif %}
+
+                            {% if brand.reference_url %}
+                            <div class="mt-2">
+                                <strong>Official URL:</strong> <a href="{{ brand.reference_url }}" target="_blank">{{ brand.reference_url }}</a>
+                            </div>
+                            {% endif %}
+
+                            {% if brand.reference_screenshot %}
+                            <div class="mt-2">
+                                <strong>Reference Screenshot:</strong><br>
+                                <img src="{{ url_for('uploaded_file', filename=brand.reference_screenshot) }}" alt="Screenshot" class="screenshot-preview img-thumbnail">
+                                <form method="POST" action="/settings/refresh_screenshot/{{ brand._id }}" style="display: inline;">
+                                    <button type="submit" class="btn btn-sm btn-secondary mt-1">🔄 Refresh Screenshot</button>
+                                </form>
+                            </div>
+                            {% elif brand.reference_url %}
+                            <div class="mt-2">
+                                <form method="POST" action="/settings/capture_screenshot/{{ brand._id }}">
+                                    <button type="submit" class="btn btn-sm btn-info">📸 Capture Screenshot</button>
+                                </form>
+                            </div>
+                            {% endif %}
+
+                            <div class="mt-2">
+                                <small class="text-muted">Added: {{ brand.created_at.strftime('%Y-%m-%d %H:%M') if brand.created_at else 'N/A' }}</small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="col-12">
+                        <div class="alert alert-info">
+                            No brands configured yet. Add your first brand above!
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Configuration Info -->
+            <div class="mt-5">
+                <h4>ℹ️ How It Works</h4>
+                <ul>
+                    <li><strong>Brand Keyword:</strong> When this keyword appears in a certificate domain name, logo detection is triggered</li>
+                    <li><strong>Reference Logo:</strong> The uploaded logo is compared with images found on the suspicious site using image similarity algorithms</li>
+                    <li><strong>Official Website:</strong> A screenshot is captured and compared with screenshots of suspicious sites</li>
+                    <li><strong>Brand Mismatch:</strong> If the domain contains the brand keyword but the logo/screenshot doesn't match, the phishing score increases by +20</li>
+                </ul>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/jquery.js') }}"></script>
+<script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+</body>
+</html>
